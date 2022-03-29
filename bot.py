@@ -1,15 +1,20 @@
 import discord
+from discord.ext import tasks
 import logging
 import os.path
 
 
 PROJDIR = os.path.dirname(__file__)
 
+# LOGGING
 logger = logging.getLogger('discord')
-logger.setLevel(logging.DEBUG)
-handler = logging.FileHandler(filename=f'{PROJDIR}/discord.log', encoding='utf-8', mode='w')
-handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
-logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+fileHandler = logging.FileHandler(filename=f'{PROJDIR}/discord.log', encoding='utf-8', mode='w')
+fileHandler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+logger.addHandler(fileHandler)
+consoleHandler = logging.StreamHandler()
+consoleHandler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+logger.addHandler(consoleHandler)
 
 intents = discord.Intents().default()
 intents.members = True
@@ -66,15 +71,27 @@ def print_teams(guild):
 
 @client.event
 async def on_ready():
-    print('We have logged in as {0.user}'.format(client))
+    logger.info('We have logged in as {0.user}'.format(client))
 
 @client.event
 async def on_message(message):
     if message.author == client.user:
         return
 
-    if message.content.startswith("!teams"):
-        await message.channel.send(print_teams(message.guild))
+@tasks.loop(minutes=5)
+async def update_teams():
+    channel = client.get_channel(945591403382181888)
+    if channel is None:
+        logger.warning("No channel found to update teams")
+    else:
+        message = await channel.fetch_message(958342147042598932)
+        old_msg = message.content
+        new_msg = print_teams(message.guild)
+
+        if new_msg != old_msg:
+            logger.info("Team constellations have changed. Updating message...")
+            await message.edit(content=new_msg)
 
 
+update_teams.start()
 client.run(token)
