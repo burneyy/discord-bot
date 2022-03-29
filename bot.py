@@ -1,9 +1,13 @@
 import discord
 import logging
+import os.path
+
+
+PROJDIR = os.path.dirname(__file__)
 
 logger = logging.getLogger('discord')
 logger.setLevel(logging.DEBUG)
-handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
+handler = logging.FileHandler(filename=f'{PROJDIR}/discord.log', encoding='utf-8', mode='w')
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 logger.addHandler(handler)
 
@@ -12,7 +16,7 @@ intents.members = True
 client = discord.Client(intents=intents)
 
 token = None
-with open("token.txt", "r") as f:
+with open(f"{PROJDIR}/bot_token.txt", "r") as f:
     token = f.read().strip()
 
 
