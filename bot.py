@@ -1,5 +1,7 @@
 import discord
 from discord.ext import tasks
+import aiohttp
+import asyncio
 import logging
 import os.path
 
@@ -61,7 +63,11 @@ def print_teams(guild):
             if member.id not in ids_in_teams:
                 not_in_team.append(member)
 
-    msg += "\n\n**Members without a team**: "+", ".join([f"{m.mention}" for m in not_in_team])
+    msg += "\n\n**Members without a team**: "
+    if len(not_in_team) > 0:
+        msg += ", ".join([f"{m.mention}" for m in not_in_team])
+    else:
+        msg += "<None>"
     msg += "\nPlease contact one of the teams with free spaces in order to join them"
 
     return msg
@@ -80,11 +86,11 @@ async def on_message(message):
 
 @tasks.loop(minutes=5)
 async def update_teams():
-    channel = client.get_channel(945591403382181888)
+    channel = client.get_channel(945591403382181888) #ID of the pinboard channel
     if channel is None:
         logger.warning("No channel found to update teams")
     else:
-        message = await channel.fetch_message(958342147042598932)
+        message = await channel.fetch_message(958342147042598932) #ID of the team constellations message
         old_msg = message.content
         new_msg = print_teams(message.guild)
 
@@ -93,5 +99,58 @@ async def update_teams():
             await message.edit(content=new_msg)
 
 
+async def club_log():
+    async with aiohttp.ClientSession() as http_client:
+        while True:
+            await asyncio.sleep(300) #Every 5 minutes
+            channel = client.get_channel(945616010986266634) #ID of the log channel
+            if channel is None:
+                logger.warning("No channel found to update club log")
+                continue
+
+            async with http_client.get("https://api.brawlapi.com/v1/clublog/2R288L2YV") as resp:
+                json = await resp.json()
+                last_timestamp = None
+                with open("clublog_timestamp.txt", "r") as f:
+                    last_timestamp = int(f.read().strip())
+
+                for entry in reversed(json["history"]):
+                    timestamp = entry["timestamp"]
+                    if timestamp > last_timestamp:
+                        # New entry
+                        last_timestamp = timestamp
+
+                        d = entry["data"]
+                        t = entry["type"]
+                        player = d["player"] if "player" in d else None
+                        if t == "members":
+                            #Join or leave messages
+                            if d["joined"]:
+                                action = "joined"
+                                sign = ":dizzy:"
+                            else:
+                                action = "left"
+                                sign = ":no_entry_sign:"
+                            await channel.send(f"{sign} **{player['name']}** (#{player['tag']}) {action} the club.")
+                        elif t == "roles":
+                            #Promotions
+                            if d["promote"]:
+                                action = "promoted"
+                                sign = ":arrow_upper_right:"
+                            else:
+                                action = "demoted"
+                                sign = ":arrow_lower_right:"
+                            old = d["old"]
+                            new = d["new"]
+                            await channel.send(f"{sign} **{player['name']}** (#{player['tag']}) was {action} from {old} to {new}.")
+
+                with open("clublog_timestamp.txt", "w") as f:
+                    f.write(str(timestamp))
+
+
+loop = asyncio.get_event_loop()
+task = loop.create_task(club_log())
+
 update_teams.start()
 client.run(token)
+
