@@ -86,6 +86,7 @@ async def on_message(message):
 
 @tasks.loop(minutes=5)
 async def update_teams():
+    logger.info("Updating team constellations...")
     channel = client.get_channel(945591403382181888) #ID of the pinboard channel
     if channel is None:
         logger.warning("No channel found to update teams")
@@ -98,58 +99,104 @@ async def update_teams():
             logger.info("Team constellations have changed. Updating message...")
             await message.edit(content=new_msg)
 
+async def club_log(json):
+    logger.info("Updating club log...")
+    channel = client.get_channel(945616010986266634) #ID of the log channel
+    #channel = client.get_channel(958972040654778418) #ID of the test channel
+    if channel is None:
+        logger.warning("No channel found to update club log")
+        return
 
-async def club_log():
+    last_timestamp = None
+    with open(f"{PROJDIR}/clublog_timestamp.txt", "r") as f:
+        old_timestamp = int(f.readline().strip())
+        newest_timestamp = old_timestamp
+
+    member_change = False
+    for entry in reversed(json["history"]):
+        timestamp = entry["timestamp"]
+        if timestamp > old_timestamp:
+            #New entry
+            d = entry["data"]
+            t = entry["type"]
+            player = d["player"] if "player" in d else None
+            if t == "members":
+                #Join or leave messages
+                if d["joined"]:
+                    action = "joined"
+                    sign = ":dizzy:"
+                else:
+                    action = "left"
+                    sign = ":no_entry_sign:"
+                member_change = True
+                await channel.send(f"{sign}  **{player['name']}** (`#{player['tag']}`) {action} the club.")
+            elif t == "roles":
+                #Promotions
+                if d["promote"]:
+                    action = "promoted"
+                    sign = ":arrow_upper_right:"
+                else:
+                    action = "demoted"
+                    sign = ":arrow_lower_right:"
+                await channel.send(f"{sign}  **{player['name']}** (`#{player['tag']}`) was {action} from {d['old']} to {d['new']}.")
+            elif t == "settings" and d["type"] == "requirement":
+                #Trophy requirement changed
+                await channel.send(f":trophy:  Trophy requirement changed from {d['old']} to {d['new']}.")
+            elif t == "settings" and d["type"] == "status":
+                #Club status (open, invite-only etc.)
+                await channel.send(f":tools:  Club status changed from {d['old']} to {d['new']}.")
+        if timestamp > newest_timestamp:
+            newest_timestamp = timestamp
+
+    if member_change:
+        n_members = json["club"]["memberCount"]
+        await channel.send(f":people_holding_hands:  Current member count: {n_members}/30.")
+
+    with open(f"{PROJDIR}/clublog_timestamp.txt", "w") as f:
+        f.write(str(newest_timestamp))
+
+
+async def club_stats(json):
+    logger.info("Updating club stats...")
+    channel = client.get_channel(945301557614903349) #ID of the welcome channel
+    message = await channel.fetch_message(959085993070313474)
+    if channel is None or message is None:
+        logger.warning("No channel/message found to update club stats")
+        return
+
+    c = json["club"]
+
+    trophies = c['trophies']
+    members = c['memberCount']
+    trophies_avg = trophies//members
+    trophies_req = c['requiredTrophies']
+    tag = c['tag']
+    url = f"https://brawlify.com/stats/club/{tag}"
+
+    msg = "**========= Club Stats =========**"
+    msg += f"\n:scroll:  {c['description']}" 
+    msg += f"\n:people_holding_hands: {members}/30 members"
+    msg += f"\n:trophy: {trophies} total trophies ({trophies_avg} per member)"
+    msg += f"\n:no_entry: {trophies_req} trophies required to join"
+    msg += f"\n:link:  {url}"
+
+    await message.edit(content=msg)
+
+
+async def update_club():
     async with aiohttp.ClientSession() as http_client:
         while True:
             await asyncio.sleep(300) #Every 5 minutes
-            channel = client.get_channel(945616010986266634) #ID of the log channel
-            if channel is None:
-                logger.warning("No channel found to update club log")
-                continue
 
             async with http_client.get("https://api.brawlapi.com/v1/clublog/2R288L2YV") as resp:
                 json = await resp.json()
-                last_timestamp = None
-                with open("clublog_timestamp.txt", "r") as f:
-                    last_timestamp = int(f.read().strip())
+                await club_log(json)
+                await club_stats(json)
 
-                for entry in reversed(json["history"]):
-                    timestamp = entry["timestamp"]
-                    if timestamp > last_timestamp:
-                        # New entry
-                        last_timestamp = timestamp
-
-                        d = entry["data"]
-                        t = entry["type"]
-                        player = d["player"] if "player" in d else None
-                        if t == "members":
-                            #Join or leave messages
-                            if d["joined"]:
-                                action = "joined"
-                                sign = ":dizzy:"
-                            else:
-                                action = "left"
-                                sign = ":no_entry_sign:"
-                            await channel.send(f"{sign} **{player['name']}** (#{player['tag']}) {action} the club.")
-                        elif t == "roles":
-                            #Promotions
-                            if d["promote"]:
-                                action = "promoted"
-                                sign = ":arrow_upper_right:"
-                            else:
-                                action = "demoted"
-                                sign = ":arrow_lower_right:"
-                            old = d["old"]
-                            new = d["new"]
-                            await channel.send(f"{sign} **{player['name']}** (#{player['tag']}) was {action} from {old} to {new}.")
-
-                with open("clublog_timestamp.txt", "w") as f:
-                    f.write(str(timestamp))
 
 
 loop = asyncio.get_event_loop()
-task = loop.create_task(club_log())
+task = loop.create_task(update_club())
 
 update_teams.start()
 client.run(token)
