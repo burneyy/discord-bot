@@ -84,6 +84,29 @@ async def on_message(message):
     if message.author == client.user:
         return
 
+    text = message.content
+    if text.startswith("!eval_poll"):
+        parts = text.split(" ")
+
+        if len(parts) != 3:
+            await message.channel.send("Command has to be in the form: !eval_poll <channel_id> <message_id>")
+            return
+
+        poll = await client.get_channel(int(parts[1])).fetch_message(int(parts[2]))
+        users = dict()
+        for reaction in poll.reactions:
+            async for user in reaction.users():
+                if user in users:
+                    users[user].append(reaction)
+                else:
+                    users[user] = [reaction]
+
+        msg = "\n".join([f"{i+1}. {user.mention}: "+" ".join([f"{reaction}" for reaction in reactions]) for i, (user, reactions) in enumerate(users.items())])
+        await message.channel.send(msg)
+
+
+
+
 @tasks.loop(minutes=5)
 async def update_teams():
     logger.info("Updating team constellations...")
@@ -175,9 +198,9 @@ async def club_stats(json):
 
     msg = "**========= Club Stats =========**"
     msg += f"\n:scroll:  {c['description']}" 
-    msg += f"\n:people_holding_hands: {members}/30 members"
-    msg += f"\n:trophy: {trophies} total trophies ({trophies_avg} per member)"
-    msg += f"\n:no_entry: {trophies_req} trophies required to join"
+    msg += f"\n:people_holding_hands:  {members}/30 members"
+    msg += f"\n:trophy:  {trophies} total trophies ({trophies_avg} per member)"
+    msg += f"\n:no_entry:  {trophies_req} trophies required to join"
     msg += f"\n:link:  {url}"
 
     await message.edit(content=msg)
