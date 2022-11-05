@@ -1,5 +1,5 @@
 import discord
-from discord.ext import tasks
+from discord.ext import tasks, commands
 import aiohttp
 import asyncio
 import logging
@@ -20,11 +20,15 @@ logger.addHandler(consoleHandler)
 
 intents = discord.Intents().default()
 intents.members = True
-client = discord.Client(intents=intents)
+intents.message_content = True
 
-token = None
+bot = commands.Bot(command_prefix='!', intents=intents)
+
 with open(f"{PROJDIR}/bot_token.txt", "r") as f:
-    token = f.read().strip()
+    discord_token = f.read().strip()
+
+with open(f"{PROJDIR}/bs_token.txt", "r") as f:
+    bs_token = f.read().strip()
 
 
 def print_teams(guild):
@@ -73,13 +77,79 @@ def print_teams(guild):
     return msg
 
 
+async def club_stats(json, channel):
+    logger.info("Updating club stats...")
+    message = await channel.fetch_message(959085993070313474)
+    if channel is None or message is None:
+        logger.warning("No channel/message found to update club stats")
+        return
+
+    print(json)
+
+    trophies = json['trophies']
+    members = json['members']
+    memberCount = len(members)
+    trophies_avg = trophies//memberCount
+    trophies_req = json['requiredTrophies']
+    tag = json['tag'].replace("#", "")
+    url = f"https://brawlify.com/stats/club/{tag}"
+
+    msg = "**========= Club Stats =========**"
+    msg += f"\n:scroll:  {json['description']}"
+    msg += f"\n:people_holding_hands:  {memberCount}/30 members"
+    msg += f"\n:trophy:  {trophies} total trophies ({trophies_avg} per member)"
+    msg += f"\n:no_entry:  {trophies_req} trophies required to join"
+    msg += f"\n:link:  {url}"
+
+    await message.edit(content=msg)
+
+class MainCog(commands.Cog):
+    def __init__(self, bot):
+        print("run init")
+        self.index = 0
+        self.bot = bot
+        self.update_teams.start()
+        self.update_club.start()
+
+    def cog_unload(self):
+        self.update_teams.cancel()
+        self.update_club.cancel()
+
+    @tasks.loop(minutes=5)
+    async def update_teams(self):
+        logger.info("Updating team constellations...")
+        channel = self.bot.get_channel(1008354101207257098) #ID of the pinboard channel
+        if channel is None:
+            logger.warning("No channel found to update teams")
+        else:
+            message = await channel.fetch_message(1008361708273807491) #ID of the team constellations message
+            old_msg = message.content
+            new_msg = print_teams(message.guild)
+
+            if new_msg != old_msg:
+                logger.info("Team constellations have changed. Updating message...")
+                await message.edit(content=new_msg)
+
+    @tasks.loop(minutes=5)
+    async def update_club(self):
+        channel = self.bot.get_channel(945301557614903349) #ID of the welcome channel
+        headers = {"Authorization": f"Bearer {bs_token}"}
+        async with aiohttp.ClientSession(headers=headers) as http_client:
+            async with http_client.get("https://api.brawlstars.com/v1/clubs/%232R288L2YV") as resp:
+                json = await resp.json()
+                #await club_log(json)
+                await club_stats(json, channel)
+
+    @update_teams.before_loop
+    async def before_update_teams(self):
+        await self.bot.wait_until_ready()
+
+    @update_club.before_loop
+    async def before_update_club(self):
+        await self.bot.wait_until_ready()
 
 
-@client.event
-async def on_ready():
-    logger.info('We have logged in as {0.user}'.format(client))
-
-@client.event
+#@client.event
 async def on_message(message):
     if message.author == client.user:
         return
@@ -105,23 +175,7 @@ async def on_message(message):
         await message.channel.send(msg)
 
 
-
-
-@tasks.loop(minutes=5)
-async def update_teams():
-    logger.info("Updating team constellations...")
-    channel = client.get_channel(945591403382181888) #ID of the pinboard channel
-    if channel is None:
-        logger.warning("No channel found to update teams")
-    else:
-        message = await channel.fetch_message(958342147042598932) #ID of the team constellations message
-        old_msg = message.content
-        new_msg = print_teams(message.guild)
-
-        if new_msg != old_msg:
-            logger.info("Team constellations have changed. Updating message...")
-            await message.edit(content=new_msg)
-
+# Probably doesn't work anymore
 async def club_log(json):
     logger.info("Updating club log...")
     channel = client.get_channel(945616010986266634) #ID of the log channel
@@ -179,48 +233,17 @@ async def club_log(json):
         f.write(str(newest_timestamp))
 
 
-async def club_stats(json):
-    logger.info("Updating club stats...")
-    channel = client.get_channel(945301557614903349) #ID of the welcome channel
-    message = await channel.fetch_message(959085993070313474)
-    if channel is None or message is None:
-        logger.warning("No channel/message found to update club stats")
-        return
-
-    c = json["club"]
-
-    trophies = c['trophies']
-    members = c['memberCount']
-    trophies_avg = trophies//members
-    trophies_req = c['requiredTrophies']
-    tag = c['tag']
-    url = f"https://brawlify.com/stats/club/{tag}"
-
-    msg = "**========= Club Stats =========**"
-    msg += f"\n:scroll:  {c['description']}" 
-    msg += f"\n:people_holding_hands:  {members}/30 members"
-    msg += f"\n:trophy:  {trophies} total trophies ({trophies_avg} per member)"
-    msg += f"\n:no_entry:  {trophies_req} trophies required to join"
-    msg += f"\n:link:  {url}"
-
-    await message.edit(content=msg)
-
-
-async def update_club():
-    async with aiohttp.ClientSession() as http_client:
-        while True:
-            await asyncio.sleep(300) #Every 5 minutes
-
-            async with http_client.get("https://api.brawlapi.com/v1/clublog/2R288L2YV") as resp:
-                json = await resp.json()
-                await club_log(json)
-                await club_stats(json)
 
 
 
-loop = asyncio.get_event_loop()
-task = loop.create_task(update_club())
 
-update_teams.start()
-client.run(token)
+@bot.event
+async def on_ready():
+    logger.info('We have logged in as {0.user}'.format(bot))
+
+async def main():
+    await bot.add_cog(MainCog(bot))
+    await bot.start(discord_token)
+
+asyncio.run(main())
 

@@ -1,2 +1,4 @@
 *.log
 bot_token.txt
+bs_token.txt
+venv/
