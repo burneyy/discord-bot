@@ -84,8 +84,6 @@ async def club_stats(json, channel):
         logger.warning("No channel/message found to update club stats")
         return
 
-    print(json)
-
     trophies = json['trophies']
     members = json['members']
     memberCount = len(members)
