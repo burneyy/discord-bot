@@ -1,4 +1,5 @@
 *.log
+database.json
 bot_token.txt
 bs_token.txt
 venv/

@@ -1,9 +1,11 @@
 import discord
 from discord.ext import tasks, commands
+from datetime import datetime, timezone
 import aiohttp
 import asyncio
 import logging
 import os.path
+import json
 
 
 PROJDIR = os.path.dirname(__file__)
@@ -29,6 +31,10 @@ with open(f"{PROJDIR}/bot_token.txt", "r") as f:
 
 with open(f"{PROJDIR}/bs_token.txt", "r") as f:
     bs_token = f.read().strip()
+
+
+def utc_time_now():
+    return datetime.now(timezone.utc).strftime("%d.%m.%Y %H:%M:%S UTC")
 
 
 def print_teams(guild):
@@ -77,27 +83,28 @@ def print_teams(guild):
     return msg
 
 
-async def club_stats(json, channel):
+async def club_stats(json_dict, channel):
     logger.info("Updating club stats...")
     message = await channel.fetch_message(959085993070313474)
     if channel is None or message is None:
         logger.warning("No channel/message found to update club stats")
         return
 
-    trophies = json['trophies']
-    members = json['members']
+    trophies = json_dict['trophies']
+    members = json_dict['members']
     memberCount = len(members)
     trophies_avg = trophies//memberCount
-    trophies_req = json['requiredTrophies']
-    tag = json['tag'].replace("#", "")
+    trophies_req = json_dict['requiredTrophies']
+    tag = json_dict['tag'].replace("#", "")
     url = f"https://brawlify.com/stats/club/{tag}"
 
     msg = "**========= Club Stats =========**"
-    msg += f"\n:scroll:  {json['description']}"
+    msg += f"\n:scroll:  {json_dict['description']}"
     msg += f"\n:people_holding_hands:  {memberCount}/30 members"
     msg += f"\n:trophy:  {trophies} total trophies ({trophies_avg} per member)"
     msg += f"\n:no_entry:  {trophies_req} trophies required to join"
     msg += f"\n:link:  {url}"
+    msg += f"\n\nLast updated: {utc_time_now()}"
 
     await message.edit(content=msg)
 
@@ -126,7 +133,9 @@ class MainCog(commands.Cog):
 
             if new_msg != old_msg:
                 logger.info("Team constellations have changed. Updating message...")
-                await message.edit(content=new_msg)
+
+            new_msg += f"\n\nLast updated: {utc_time_now()}"
+            await message.edit(content=new_msg)
 
     @tasks.loop(minutes=5)
     async def update_club(self):
@@ -134,9 +143,9 @@ class MainCog(commands.Cog):
         headers = {"Authorization": f"Bearer {bs_token}"}
         async with aiohttp.ClientSession(headers=headers) as http_client:
             async with http_client.get("https://api.brawlstars.com/v1/clubs/%232R288L2YV") as resp:
-                json = await resp.json()
+                json_dict = await resp.json()
                 #await club_log(json)
-                await club_stats(json, channel)
+                await club_stats(json_dict, channel)
 
     @update_teams.before_loop
     async def before_update_teams(self):
@@ -174,7 +183,7 @@ async def on_message(message):
 
 
 # Probably doesn't work anymore
-async def club_log(json):
+async def club_log(json_dict):
     logger.info("Updating club log...")
     channel = client.get_channel(945616010986266634) #ID of the log channel
     #channel = client.get_channel(958972040654778418) #ID of the test channel
@@ -188,7 +197,7 @@ async def club_log(json):
         newest_timestamp = old_timestamp
 
     member_change = False
-    for entry in reversed(json["history"]):
+    for entry in reversed(json_dict["history"]):
         timestamp = entry["timestamp"]
         if timestamp > old_timestamp:
             #New entry
@@ -224,11 +233,57 @@ async def club_log(json):
             newest_timestamp = timestamp
 
     if member_change:
-        n_members = json["club"]["memberCount"]
+        n_members = json_dict["club"]["memberCount"]
         await channel.send(f":people_holding_hands:  Current member count: {n_members}/30.")
 
     with open(f"{PROJDIR}/clublog_timestamp.txt", "w") as f:
         f.write(str(newest_timestamp))
+
+
+
+
+@bot.command()
+async def profile(ctx, *args):
+    if len(args) > 1:
+        await ctx.send("Command has to be used as: !profile [user_id]")
+        return
+
+    user_id = ctx.author.id
+    with open(f"{PROJDIR}/database.json", "w+") as db:
+        user_id = ctx.author.id
+        try:
+            json_dict = json.load(db)
+        except json.JSONDecodeError:
+            json_dict = {"users": {}}
+
+        if len(args) == 0:
+            if user_id not in json_dict["users"]:
+                await ctx.send(f"No entry for user id {user_id}")
+                return
+
+            await ctx.send(users[user_id])
+
+
+        elif len(args) == 1:
+            bs_tag = args[0].lstrip("#")
+            if len(bs_tag) != 8:
+                await ctx.send(f"Invalid brawl stars tag {bs_tag}")
+                return
+
+            bs_info = {}
+            headers = {"Authorization": f"Bearer {bs_token}"}
+            async with aiohttp.ClientSession(headers=headers) as http_client:
+                async with http_client.get(f"https://api.brawlstars.com/v1/players/%23{bs_tag}") as resp:
+                    if resp.status != 200:
+                        await ctx.send(f"Brawl stars tag #{bs_tag} not found")
+                        return
+                    bs_info = await resp.json()
+
+            json_dict["users"][user_id] = bs_tag
+            json.dump(json_dict, db, indent=4)
+            await ctx.send(f"Saved BrawlStars profile #{bs_tag} ({bs_info['name']}, {bs_info['trophies']} trophies)")
+
+
 
 
 
