@@ -1,6 +1,7 @@
 import discord
 from discord.ext import tasks, commands
 from datetime import datetime, timezone
+from thefuzz import process
 import aiohttp
 import asyncio
 import logging
@@ -113,10 +114,12 @@ class MainCog(commands.Cog):
         print("run init")
         self.index = 0
         self.bot = bot
+        self.update_members.start()
         self.update_teams.start()
         self.update_club.start()
 
     def cog_unload(self):
+        self.update_members.cancel()
         self.update_teams.cancel()
         self.update_club.cancel()
 
@@ -138,6 +141,54 @@ class MainCog(commands.Cog):
             await message.edit(content=new_msg)
 
     @tasks.loop(minutes=5)
+    async def update_members(self):
+        role_to_id = {"president": 945309687685984276, "vicePresident": 945310000761438218,
+                "senior": 945310228830908436, "member": 945310581827715082}
+        logger.info("Updating club members...")
+        channel = self.bot.get_channel(958972040654778418) #ID of the test channel
+        if channel is None:
+            logger.warning("No channel found to update members")
+            return
+
+        headers = {"Authorization": f"Bearer {bs_token}"}
+        display_names = [m.display_name for m in channel.guild.members]
+        async with aiohttp.ClientSession(headers=headers) as http_client:
+            async with http_client.get("https://api.brawlstars.com/v1/clubs/%232R288L2YV/members") as resp:
+                json_dict = await resp.json()
+                msg = "Brawlstars Member - Discord Member"
+                for member in json_dict["items"]:
+                    name = member["name"]
+                    role = member["role"]
+                    role_id = role_to_id[role]
+                    if msg != "":
+                        msg += "\n"
+                    msg += f"{name} (<@&{role_id}>)"
+                    display_name, score = process.extractOne(name, display_names)
+                    for discord_member in channel.guild.members:
+                        if discord_member.display_name == display_name:
+                            role_mention = None
+                            for role in discord_member.roles:
+                                if role.name in ["Friends", "Member", "Senior", "Vice-President", "President"]:
+                                    role_mention = role.mention
+                                    break
+                            msg += f" - {discord_member.mention} ({role_mention})"
+                            break
+                    if score < 75:
+                        msg += " :question:"
+
+                    if len(msg) > 1500:
+                        await channel.send(msg)
+                        msg = ""
+
+                if msg != "":
+                    await channel.send(msg)
+
+
+
+
+
+
+    @tasks.loop(minutes=5)
     async def update_club(self):
         channel = self.bot.get_channel(945301557614903349) #ID of the welcome channel
         headers = {"Authorization": f"Bearer {bs_token}"}
@@ -146,6 +197,10 @@ class MainCog(commands.Cog):
                 json_dict = await resp.json()
                 #await club_log(json)
                 await club_stats(json_dict, channel)
+
+    @update_members.before_loop
+    async def before_update_members(self):
+        await self.bot.wait_until_ready()
 
     @update_teams.before_loop
     async def before_update_teams(self):
