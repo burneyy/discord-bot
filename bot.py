@@ -197,6 +197,9 @@ class MainCog(commands.Cog):
                 if dc_role_mention != bs_role_mention:
                     content += f" / {dc_role_mention} " + 3 * ":question:"
 
+            # Trophies
+            content += f" - {bs_member['trophies']} :trophy:"
+
         content += f"\n\nLast updated: {utc_time_now()}"
         await message.edit(content=content)
 
