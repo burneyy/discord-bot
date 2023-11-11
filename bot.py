@@ -148,30 +148,11 @@ class MainCog(commands.Cog):
         self.index = 0
         self.bot = bot
         self.update_members.start()
-        self.update_teams.start()
         self.update_club.start()
 
     def cog_unload(self):
         self.update_members.cancel()
-        self.update_teams.cancel()
         self.update_club.cancel()
-
-    @tasks.loop(minutes=5)
-    async def update_teams(self):
-        logger.info("Updating team constellations...")
-        channel = self.bot.get_channel(DC_CH_CLUB_OVERVIEW)
-        if channel is None:
-            logger.warning("No channel found to update teams")
-        else:
-            message = await channel.fetch_message(1008361708273807491)  # ID of the team constellations message
-            old_msg = message.content
-            new_msg = print_teams(message.guild)
-
-            if new_msg != old_msg:
-                logger.info("Team constellations have changed. Updating message...")
-
-            new_msg += f"\n\nLast updated: {utc_time_now()}"
-            await message.edit(content=new_msg)
 
     @tasks.loop(minutes=5)
     async def update_members(self):
@@ -224,10 +205,6 @@ class MainCog(commands.Cog):
 
     @update_members.before_loop
     async def before_update_members(self):
-        await self.bot.wait_until_ready()
-
-    @update_teams.before_loop
-    async def before_update_teams(self):
         await self.bot.wait_until_ready()
 
     @update_club.before_loop
