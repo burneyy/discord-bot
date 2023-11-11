@@ -38,10 +38,11 @@ BS_ROLE_TO_ID = {"president": 945309687685984276, "vicePresident": 9453100007614
                  "senior": 945310228830908436, "member": 945310581827715082}
 
 # Discord constants
-DC_CH_CLUB_OVERVIEW = 1008354101207257098
-DC_MSG_CLUB_OVERVIEW_1 = 1008361708273807491
-DC_MSG_CLUB_OVERVIEW_2 = 1171568016908091463
-DC_MSG_CLUB_OVERVIEW_3 = 1172926621494300743
+DC_CH_CLUB_MEMBERS = 1008354101207257098
+DC_MSG_CLUB_MEMBERS_1 = 1172931277410795602
+DC_MSG_CLUB_MEMBERS_2 = 1172931280489422879
+DC_MSG_CLUB_MEMBERS_3 = 1172931281688993882
+
 DC_MEMBER_ROLES = ["Member", "Senior", "Vice-President", "President"]
 DC_EXCLUSIVE_ROLES = DC_MEMBER_ROLES + ["Friends"]
 
@@ -169,14 +170,14 @@ class MainCog(commands.Cog):
     @tasks.loop(minutes=5)
     async def update_members(self):
         logger.info("Updating club members...")
-        channel = self.bot.get_channel(DC_CH_CLUB_OVERVIEW)
+        channel = self.bot.get_channel(DC_CH_CLUB_MEMBERS)
         if channel is None:
             logger.warning("No channel found to update members")
             return
 
         dc_users = filter_bots(channel.guild.members)
 
-        message = await channel.fetch_message(DC_MSG_CLUB_OVERVIEW_1)
+        message = await channel.fetch_message(DC_MSG_CLUB_MEMBERS_1)
         content = "**Brawl Stars Club Members**"
         bs_members = await fetch_bs_club_members()
         dc_member_ids_listed = []
@@ -184,7 +185,7 @@ class MainCog(commands.Cog):
             if pos == 15:
                 await message.edit(content=content)
                 content = ""
-                message = await channel.fetch_message(DC_MSG_CLUB_OVERVIEW_2)
+                message = await channel.fetch_message(DC_MSG_CLUB_MEMBERS_2)
 
             # Brawl Stars vs. Discord Name
             bs_name = bs_member["name"]
@@ -215,7 +216,7 @@ class MainCog(commands.Cog):
         await message.edit(content=content)
 
         # Not listed discord members
-        message = await channel.fetch_message(DC_MSG_CLUB_OVERVIEW_3)
+        message = await channel.fetch_message(DC_MSG_CLUB_MEMBERS_3)
         dc_members = filter_club_members(dc_users)
         content = "**Discord members not found in club:** "
         dc_members_unlisted = [m for m in dc_members if m.id not in dc_member_ids_listed]
