@@ -242,66 +242,6 @@ async def on_message(message):
         await message.channel.send(msg)
 
 
-# Probably doesn't work anymore
-async def club_log(json_dict):
-    logger.info("Updating club log...")
-    channel = client.get_channel(945616010986266634) #ID of the log channel
-    #channel = client.get_channel(958972040654778418) #ID of the test channel
-    if channel is None:
-        logger.warning("No channel found to update club log")
-        return
-
-    last_timestamp = None
-    with open(f"{PROJDIR}/clublog_timestamp.txt", "r") as f:
-        old_timestamp = int(f.readline().strip())
-        newest_timestamp = old_timestamp
-
-    member_change = False
-    for entry in reversed(json_dict["history"]):
-        timestamp = entry["timestamp"]
-        if timestamp > old_timestamp:
-            #New entry
-            d = entry["data"]
-            t = entry["type"]
-            player = d["player"] if "player" in d else None
-            if t == "members":
-                #Join or leave messages
-                if d["joined"]:
-                    action = "joined"
-                    sign = ":dizzy:"
-                else:
-                    action = "left"
-                    sign = ":no_entry_sign:"
-                member_change = True
-                await channel.send(f"{sign}  **{player['name']}** (`#{player['tag']}`) {action} the club.")
-            elif t == "roles":
-                #Promotions
-                if d["promote"]:
-                    action = "promoted"
-                    sign = ":arrow_upper_right:"
-                else:
-                    action = "demoted"
-                    sign = ":arrow_lower_right:"
-                await channel.send(f"{sign}  **{player['name']}** (`#{player['tag']}`) was {action} from {d['old']} to {d['new']}.")
-            elif t == "settings" and d["type"] == "requirement":
-                #Trophy requirement changed
-                await channel.send(f":trophy:  Trophy requirement changed from {d['old']} to {d['new']}.")
-            elif t == "settings" and d["type"] == "status":
-                #Club status (open, invite-only etc.)
-                await channel.send(f":tools:  Club status changed from {d['old']} to {d['new']}.")
-        if timestamp > newest_timestamp:
-            newest_timestamp = timestamp
-
-    if member_change:
-        n_members = json_dict["club"]["memberCount"]
-        await channel.send(f":people_holding_hands:  Current member count: {n_members}/30.")
-
-    with open(f"{PROJDIR}/clublog_timestamp.txt", "w") as f:
-        f.write(str(newest_timestamp))
-
-
-
-
 @bot.command()
 async def profile(ctx, *args):
     if len(args) > 1:
