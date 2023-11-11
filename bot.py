@@ -1,7 +1,7 @@
 import discord
 from discord.ext import tasks, commands
 from datetime import datetime, timezone
-from thefuzz import process
+from thefuzz import fuzz
 import aiohttp
 import asyncio
 import logging
@@ -103,6 +103,19 @@ def filter_bots(users):
     return [user for user in users if "Bots" not in [role.name for role in user.roles]]
 
 
+def fuzzy_search_dc_member(name, members, score_cutoff=0):
+    best_score = 0
+    best_member = None
+    for member in members:
+        score = fuzz.ratio(name, member.display_name)
+        if score > best_score:
+            best_score = score
+            best_member = member
+
+    if best_score > score_cutoff:
+        return best_member
+
+
 async def club_stats(json_dict, channel):
     logger.info("Updating club stats...")
     message = await channel.fetch_message(959085993070313474)
@@ -177,7 +190,7 @@ class MainCog(commands.Cog):
             # Brawl Stars vs. Discord Name
             bs_name = bs_member["name"]
             msg += f"\n{pos + 1:2d}. {bs_name}"
-            dc_member = process.extractOne(bs_name, dc_users, processor=lambda x: x.display_name, score_cutoff=75)
+            dc_member = fuzzy_search_dc_member(bs_name, dc_users, score_cutoff=75)
             if dc_member is not None:
                 msg += f" / {dc_member.mention}"
             else:
