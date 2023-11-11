@@ -33,6 +33,7 @@ with open(f"{PROJDIR}/bot_token.txt", "r") as f:
 with open(f"{PROJDIR}/bs_token.txt", "r") as f:
     bs_token = f.read().strip()
 
+CH_CLUB_OVERVIEW = 1008354101207257098
 
 def utc_time_now():
     return datetime.now(timezone.utc).strftime("%d.%m.%Y %H:%M:%S UTC")
@@ -126,7 +127,7 @@ class MainCog(commands.Cog):
     @tasks.loop(minutes=5)
     async def update_teams(self):
         logger.info("Updating team constellations...")
-        channel = self.bot.get_channel(1008354101207257098) #ID of the pinboard channel
+        channel = self.bot.get_channel(CH_CLUB_OVERVIEW)
         if channel is None:
             logger.warning("No channel found to update teams")
         else:
@@ -145,43 +146,47 @@ class MainCog(commands.Cog):
         role_to_id = {"president": 945309687685984276, "vicePresident": 945310000761438218,
                 "senior": 945310228830908436, "member": 945310581827715082}
         logger.info("Updating club members...")
-        channel = self.bot.get_channel(958972040654778418) #ID of the test channel
+        channel = self.bot.get_channel(CH_CLUB_OVERVIEW)
         if channel is None:
             logger.warning("No channel found to update members")
             return
+
+        message = await channel.fetch_message(1171568016908091463)
 
         headers = {"Authorization": f"Bearer {bs_token}"}
         display_names = [m.display_name for m in channel.guild.members]
         async with aiohttp.ClientSession(headers=headers) as http_client:
             async with http_client.get("https://api.brawlstars.com/v1/clubs/%232R288L2YV/members") as resp:
                 json_dict = await resp.json()
-                msg = "Brawlstars Member - Discord Member"
+                msg = "**Brawlstars Member - Discord Member (role)**"
                 for member in json_dict["items"]:
-                    name = member["name"]
-                    role = member["role"]
-                    role_id = role_to_id[role]
-                    if msg != "":
-                        msg += "\n"
-                    msg += f"{name} (<@&{role_id}>)"
-                    display_name, score = process.extractOne(name, display_names)
-                    for discord_member in channel.guild.members:
-                        if discord_member.display_name == display_name:
-                            role_mention = None
-                            for role in discord_member.roles:
-                                if role.name in ["Friends", "Member", "Senior", "Vice-President", "President"]:
-                                    role_mention = role.mention
-                                    break
-                            msg += f" - {discord_member.mention} ({role_mention})"
-                            break
+                    questionable = False
+                    club_name = member["name"]
+                    club_role_id = role_to_id[member["role"]]
+                    msg += f"\n{club_name}"
+                    disc_name, score = process.extractOne(club_name, display_names)
                     if score < 75:
+                        questionable = True
+                    for disc_member in channel.guild.members:
+                        if disc_member.display_name == disc_name:
+                            msg += f" - {disc_member.mention}"
+                            disc_role_id = None
+                            for role in disc_member.roles:
+                                if role.name in ["Friends", "Member", "Senior", "Vice-President", "President"]:
+                                    disc_role_id = role.id
+                                    break
+                            if disc_role_id == club_role_id:
+                                msg += f" (<@&{disc_role_id}>)"
+                            else:
+                                msg += f" (<@&{club_role_id}>/<@&{disc_role_id}>)"
+                                questionable = True
+                            break
+
+                    if questionable:
                         msg += " :question:"
 
-                    if len(msg) > 1500:
-                        await channel.send(msg)
-                        msg = ""
-
-                if msg != "":
-                    await channel.send(msg)
+                msg += f"\n\nLast updated: {utc_time_now()}"
+                await message.edit(content=msg)
 
 
 
