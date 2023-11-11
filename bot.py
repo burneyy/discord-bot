@@ -178,7 +178,7 @@ class MainCog(commands.Cog):
         dc_users = filter_bots(channel.guild.members)
 
         message = await channel.fetch_message(DC_MSG_CLUB_MEMBERS_1)
-        content = "**Brawl Stars Club Members**"
+        content = "**========= Brawl Stars Club Members =========**"
         bs_members = await fetch_bs_club_members()
         dc_member_ids_listed = []
         for pos, bs_member in enumerate(bs_members):
