@@ -2,3 +2,4 @@ aiohttp
 aiosignal
 async-timeout
 discord.py
+thefuzz
