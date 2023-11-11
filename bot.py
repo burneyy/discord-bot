@@ -177,7 +177,7 @@ class MainCog(commands.Cog):
 
             # Brawl Stars vs. Discord Name
             bs_name = bs_member["name"]
-            content += f"\n{pos + 1:2d}. {bs_name}"
+            content += f"\n{pos+1}. {bs_name}"
             dc_member = fuzzy_search_dc_member(bs_name, dc_users, score_cutoff=75)
             if dc_member is not None:
                 content += f" / {dc_member.mention}"
@@ -192,7 +192,7 @@ class MainCog(commands.Cog):
                 dc_role_mention = "None"
                 for role in dc_member.roles:
                     if role.name in DC_EXCLUSIVE_ROLES:
-                        disc_role_mention = role.mention
+                        dc_role_mention = role.mention
                         break
                 if dc_role_mention != bs_role_mention:
                     content += f" / {dc_role_mention} " + 3 * ":question:"
