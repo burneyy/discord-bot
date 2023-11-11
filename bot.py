@@ -202,7 +202,7 @@ class MainCog(commands.Cog):
             bs_role_mention = f"<@&{BS_ROLE_TO_ID[bs_role]}>"
             content += f" - {bs_role_mention}"
             if dc_member is not None:
-                dc_role_mention = "None"
+                dc_role_mention = "*None*"
                 for role in dc_member.roles:
                     if role.name in DC_EXCLUSIVE_ROLES:
                         dc_role_mention = role.mention
@@ -220,12 +220,18 @@ class MainCog(commands.Cog):
         dc_members = filter_club_members(dc_users)
         content = "**Discord members not found in club:** "
         dc_members_unlisted = [m for m in dc_members if m.id not in dc_member_ids_listed]
-        content += ", ".join([m.mention for m in dc_members_unlisted])
+        if len(dc_members_unlisted) > 0:
+            content += ", ".join([m.mention for m in dc_members_unlisted])
+        else:
+            content += "*None*"
 
         # Duplicate listings
         content += "\n**Discord members found multiple times in club:** "
         dc_members_duplicate = [m for m in dc_members if dc_member_ids_listed.count(m.id) > 1]
-        content += ", ".join([m.mention for m in dc_members_duplicate])
+        if len(dc_members_duplicate) > 0:
+            content += ", ".join([m.mention for m in dc_members_duplicate])
+        else:
+            content += "*None*"
 
         content += f"\n\nLast updated: {utc_time_now()}"
         await message.edit(content=content)
