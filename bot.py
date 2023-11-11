@@ -105,6 +105,15 @@ def filter_bots(users):
     return [user for user in users if "Bots" not in [role.name for role in user.roles]]
 
 
+def filter_club_members(users):
+    members = []
+    for user in users:
+        for role in user.roles:
+            if role.name in DC_MEMBER_ROLES:
+                members.append(user)
+    return members
+
+
 def fuzzy_search_dc_member(name, members, score_cutoff=0):
     best_score = 0
     best_member = None
@@ -169,6 +178,7 @@ class MainCog(commands.Cog):
         message = await channel.fetch_message(DC_MSG_CLUB_OVERVIEW_1)
         content = "**Brawl Stars Club Members**"
         bs_members = await fetch_bs_club_members()
+        dc_member_ids_listed = []
         for pos, bs_member in enumerate(bs_members):
             if pos == 15:
                 await message.edit(content=content)
@@ -180,6 +190,7 @@ class MainCog(commands.Cog):
             content += f"\n{pos+1}. {bs_name}"
             dc_member = fuzzy_search_dc_member(bs_name, dc_users, score_cutoff=75)
             if dc_member is not None:
+                dc_member_ids_listed.append(dc_member.id)
                 content += f" / {dc_member.mention}"
             else:
                 content += " / " + 3 * ":question:"
@@ -200,8 +211,15 @@ class MainCog(commands.Cog):
             # Trophies
             content += f" - {bs_member['trophies']} :trophy:"
 
-        content += f"\n\nLast updated: {utc_time_now()}"
         await message.edit(content=content)
+
+        # Not listed discord members
+        content = "**Non-listed discord members:** "
+        dc_members = filter_club_members(dc_users)
+        dc_members_unlisted = [m for m in dc_members if m.id not in dc_member_ids_listed]
+        content += ", ".join([m.mention for m in dc_members_unlisted])
+        content += f"\n\nLast updated: {utc_time_now()}"
+        channel.send(content)
 
     @tasks.loop(minutes=5)
     async def update_club(self):
