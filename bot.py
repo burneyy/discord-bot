@@ -109,7 +109,7 @@ def fuzzy_search_dc_member(name, members, score_cutoff=0):
     best_score = 0
     best_member = None
     for member in members:
-        score = fuzz.ratio(name, member.display_name)
+        score = fuzz.WRatio(name, member.display_name)
         if score > best_score:
             best_score = score
             best_member = member
