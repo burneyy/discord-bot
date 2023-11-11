@@ -39,6 +39,8 @@ BS_ROLE_TO_ID = {"president": 945309687685984276, "vicePresident": 9453100007614
 
 # Discord constants
 DC_CH_CLUB_OVERVIEW = 1008354101207257098
+DC_MSG_CLUB_OVERVIEW_1 = 1008361708273807491
+DC_MSG_CLUB_OVERVIEW_2 = 1171568016908091463
 DC_MEMBER_ROLES = ["Member", "Senior", "Vice-President", "President"]
 DC_EXCLUSIVE_ROLES = DC_MEMBER_ROLES + ["Friends"]
 
@@ -164,23 +166,28 @@ class MainCog(commands.Cog):
 
         dc_users = filter_bots(channel.guild.members)
 
-        message = await channel.fetch_message(1171568016908091463)
-        msg = "**Brawl Stars Club Members**"
+        message = await channel.fetch_message(DC_MSG_CLUB_OVERVIEW_1)
+        content = "**Brawl Stars Club Members**"
         bs_members = await fetch_bs_club_members()
         for pos, bs_member in enumerate(bs_members):
+            if pos == 15:
+                await message.edit(content=content)
+                content = ""
+                message = await channel.fetch_message(DC_MSG_CLUB_OVERVIEW_2)
+
             # Brawl Stars vs. Discord Name
             bs_name = bs_member["name"]
-            msg += f"\n{pos + 1:2d}. {bs_name}"
+            content += f"\n{pos + 1:2d}. {bs_name}"
             dc_member = fuzzy_search_dc_member(bs_name, dc_users, score_cutoff=75)
             if dc_member is not None:
-                msg += f" / {dc_member.mention}"
+                content += f" / {dc_member.mention}"
             else:
-                msg += " / " + 3 * ":question:"
+                content += " / " + 3 * ":question:"
 
             # Brawl Stars vs. Discord Role
             bs_role = bs_member["role"]
             bs_role_mention = f"<@&{BS_ROLE_TO_ID[bs_role]}>"
-            msg += f" - {bs_role_mention}"
+            content += f" - {bs_role_mention}"
             if dc_member is not None:
                 dc_role_mention = "None"
                 for role in dc_member.roles:
@@ -188,10 +195,10 @@ class MainCog(commands.Cog):
                         disc_role_mention = role.mention
                         break
                 if dc_role_mention != bs_role_mention:
-                    msg += f" / {dc_role_mention} " + 3 * ":question:"
+                    content += f" / {dc_role_mention} " + 3 * ":question:"
 
-        msg += f"\n\nLast updated: {utc_time_now()}"
-        await message.edit(content=msg)
+        content += f"\n\nLast updated: {utc_time_now()}"
+        await message.edit(content=content)
 
     @tasks.loop(minutes=5)
     async def update_club(self):
