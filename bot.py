@@ -41,6 +41,7 @@ BS_ROLE_TO_ID = {"president": 945309687685984276, "vicePresident": 9453100007614
 DC_CH_CLUB_OVERVIEW = 1008354101207257098
 DC_MSG_CLUB_OVERVIEW_1 = 1008361708273807491
 DC_MSG_CLUB_OVERVIEW_2 = 1171568016908091463
+DC_MSG_CLUB_OVERVIEW_3 = 1172926621494300743
 DC_MEMBER_ROLES = ["Member", "Senior", "Vice-President", "President"]
 DC_EXCLUSIVE_ROLES = DC_MEMBER_ROLES + ["Friends"]
 
@@ -214,12 +215,19 @@ class MainCog(commands.Cog):
         await message.edit(content=content)
 
         # Not listed discord members
-        content = "**Non-listed discord members:** "
+        message = await channel.fetch_message(DC_MSG_CLUB_OVERVIEW_3)
         dc_members = filter_club_members(dc_users)
+        content = "**Discord members not found in club:** "
         dc_members_unlisted = [m for m in dc_members if m.id not in dc_member_ids_listed]
         content += ", ".join([m.mention for m in dc_members_unlisted])
+
+        # Duplicate listings
+        content += "\n**Discord members found multiple times in club:** "
+        dc_members_duplicate = [m for m in dc_members if dc_member_ids_listed.count(m.id) > 1]
+        content += ", ".join([m.mention for m in dc_members_duplicate])
+
         content += f"\n\nLast updated: {utc_time_now()}"
-        channel.send(content)
+        await message.edit(content=content)
 
     @tasks.loop(minutes=5)
     async def update_club(self):
