@@ -100,7 +100,7 @@ async def fetch_bs_club_members():
     async with aiohttp.ClientSession(headers=BS_HEADERS) as http_client:
         async with http_client.get("https://api.brawlstars.com/v1/clubs/%232R288L2YV/members") as resp:
             json_body = await resp.json()
-            return json_body["items"]
+            return json_body["items"] if "items" in json_body else []
 
 
 def filter_bots(users):
