@@ -6,7 +6,6 @@ import aiohttp
 import asyncio
 import logging
 import os.path
-import json
 
 PROJDIR = os.path.dirname(__file__)
 
@@ -51,51 +50,6 @@ def utc_time_now():
     return datetime.now(timezone.utc).strftime("%d.%m.%Y %H:%M:%S UTC")
 
 
-def print_teams(guild):
-    msg = "**Club League Team Constellations**\n**========================**\n"
-
-    roles = guild.roles
-    team_roles = {}
-    member_roles = {}
-    for role in roles:
-        if role.name.startswith("Team"):
-            team_roles[role.name] = role.id
-
-        if role.name in ["Member", "Senior", "Vice-President", "President"]:
-            member_roles[role.name] = role.id
-
-    # Print teams
-    ids_in_teams = []
-    for t in range(1, 11, 1):
-        team_name = f"Team {t}"
-        msg += f"\n{t}. "
-        team_id = team_roles[team_name]
-        role = guild.get_role(team_id)
-        team_members = role.members
-        ids_in_teams.extend([m.id for m in team_members])
-
-        msg += ", ".join([f"{m.mention}" for m in team_members])
-        if len(team_members) != 3:
-            msg += f" ({len(team_members)}/3)"
-
-    # Find members not in a team
-    not_in_team = []
-    for role_name, role_id in member_roles.items():
-        role_members = guild.get_role(role_id).members
-        for member in role_members:
-            if member.id not in ids_in_teams:
-                not_in_team.append(member)
-
-    msg += "\n\n**Members without a team**: "
-    if len(not_in_team) > 0:
-        msg += ", ".join([f"{m.mention}" for m in not_in_team])
-    else:
-        msg += "<None>"
-    msg += "\nPlease contact one of the teams with free spaces in order to join them"
-
-    return msg
-
-
 async def fetch_bs_club_members():
     async with aiohttp.ClientSession(headers=BS_HEADERS) as http_client:
         async with http_client.get("https://api.brawlstars.com/v1/clubs/%232R288L2YV/members") as resp:
@@ -138,15 +92,15 @@ async def club_stats(json_dict, channel):
 
     trophies = json_dict['trophies']
     members = json_dict['members']
-    memberCount = len(members)
-    trophies_avg = trophies // memberCount
+    member_count = len(members)
+    trophies_avg = trophies // member_count
     trophies_req = json_dict['requiredTrophies']
     tag = json_dict['tag'].replace("#", "")
     url = f"https://brawlify.com/stats/club/{tag}"
 
     msg = "**========= Club Stats =========**"
     msg += f"\n:scroll:  {json_dict['description']}"
-    msg += f"\n:people_holding_hands:  {memberCount}/30 members"
+    msg += f"\n:people_holding_hands:  {member_count}/30 members"
     msg += f"\n:trophy:  {trophies} total trophies ({trophies_avg} per member)"
     msg += f"\n:no_entry:  {trophies_req} trophies required to join"
     msg += f"\n:link:  {url}"
@@ -247,82 +201,9 @@ class MainCog(commands.Cog):
                 await club_stats(json_dict, channel)
 
     @update_members.before_loop
-    async def before_update_members(self):
-        await self.bot.wait_until_ready()
-
     @update_club.before_loop
-    async def before_update_club(self):
+    async def wait_until_ready(self):
         await self.bot.wait_until_ready()
-
-
-# @client.event
-async def on_message(message):
-    if message.author == client.user:
-        return
-
-    text = message.content
-    if text.startswith("!eval_poll"):
-        parts = text.split(" ")
-
-        if len(parts) != 3:
-            await message.channel.send("Command has to be in the form: !eval_poll <channel_id> <message_id>")
-            return
-
-        poll = await client.get_channel(int(parts[1])).fetch_message(int(parts[2]))
-        users = dict()
-        for reaction in poll.reactions:
-            async for user in reaction.users():
-                if user in users:
-                    users[user].append(reaction)
-                else:
-                    users[user] = [reaction]
-
-        msg = "\n".join(
-            [f"{i + 1}. {user.mention}: " + " ".join([f"{reaction}" for reaction in reactions]) for i, (user, reactions)
-             in enumerate(users.items())])
-        await message.channel.send(msg)
-
-
-@bot.command()
-async def profile(ctx, *args):
-    if len(args) > 1:
-        await ctx.send("Command has to be used as: !profile [user_id]")
-        return
-
-    user_id = ctx.author.id
-    with open(f"{PROJDIR}/database.json", "w+") as db:
-        user_id = ctx.author.id
-        try:
-            json_dict = json.load(db)
-        except json.JSONDecodeError:
-            json_dict = {"users": {}}
-
-        if len(args) == 0:
-            if user_id not in json_dict["users"]:
-                await ctx.send(f"No entry for user id {user_id}")
-                return
-
-            await ctx.send(users[user_id])
-
-
-        elif len(args) == 1:
-            bs_tag = args[0].lstrip("#")
-            if len(bs_tag) != 8:
-                await ctx.send(f"Invalid brawl stars tag {bs_tag}")
-                return
-
-            bs_info = {}
-            headers = {"Authorization": f"Bearer {bs_token}"}
-            async with aiohttp.ClientSession(headers=headers) as http_client:
-                async with http_client.get(f"https://api.brawlstars.com/v1/players/%23{bs_tag}") as resp:
-                    if resp.status != 200:
-                        await ctx.send(f"Brawl stars tag #{bs_tag} not found")
-                        return
-                    bs_info = await resp.json()
-
-            json_dict["users"][user_id] = bs_tag
-            json.dump(json_dict, db, indent=4)
-            await ctx.send(f"Saved BrawlStars profile #{bs_tag} ({bs_info['name']}, {bs_info['trophies']} trophies)")
 
 
 @bot.event
