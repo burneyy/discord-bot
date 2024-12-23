@@ -221,7 +221,7 @@ class MainCog(commands.Cog):
                 json_dict = await resp.json()
                 await club_stats(json_dict, channel)
 
-    @tasks.loop(minutes=5)
+    @tasks.loop(hours=6)
     async def update_activity(self):
         logger.info("Updating activity...")
         channel = self.bot.get_channel(DC_CH_ACTIVITY_MONITOR)
