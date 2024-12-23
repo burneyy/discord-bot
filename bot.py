@@ -239,6 +239,7 @@ class MainCog(commands.Cog):
 
     @update_members.before_loop
     @update_club.before_loop
+    @update_activity.before_loop
     async def wait_until_ready(self):
         await self.bot.wait_until_ready()
 
