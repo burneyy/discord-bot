@@ -124,6 +124,7 @@ async def club_stats(json_dict, channel):
     msg += f"\n\nLast updated: {utc_time_now()}"
 
     await message.edit(content=msg)
+    logger.info("Updated club stats")
 
 
 class MainCog(commands.Cog):
@@ -206,6 +207,7 @@ class MainCog(commands.Cog):
 
         content += f"\n\nLast updated: {utc_time_now()}"
         await message.edit(content=content)
+        logger.info("Updated club members")
 
     @tasks.loop(minutes=5)
     async def update_club(self):
@@ -217,7 +219,7 @@ class MainCog(commands.Cog):
 
     @tasks.loop(minutes=5)
     async def update_activity(self):
-        logger.info("Updating club members...")
+        logger.info("Updating activity...")
         channel = self.bot.get_channel(DC_CH_TEST)
         if channel is None:
             logger.warning("No channel found to update activity")
@@ -232,6 +234,7 @@ class MainCog(commands.Cog):
             content += f"\n{name}: {len(matches)} matches"
 
         channel.send(content)
+        logger.info("Updated activity")
 
 
     @update_members.before_loop
