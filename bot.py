@@ -5,7 +5,9 @@ from thefuzz import fuzz
 import aiohttp
 import asyncio
 import logging
+import urllib.parse
 import os.path
+
 
 PROJDIR = os.path.dirname(__file__)
 
@@ -37,10 +39,17 @@ BS_ROLE_TO_ID = {"president": 945309687685984276, "vicePresident": 9453100007614
                  "senior": 945310228830908436, "member": 945310581827715082}
 
 # Discord constants
-DC_CH_CLUB_MEMBERS = 1008354101207257098
+DC_CH_CLUB_MEMBERS = 1008354101207257098 # ID of club-members channel
 DC_MSG_CLUB_MEMBERS_1 = 1172931277410795602
 DC_MSG_CLUB_MEMBERS_2 = 1172931280489422879
 DC_MSG_CLUB_MEMBERS_3 = 1172931281688993882
+
+DC_CH_WELCOME = 945301557614903349 # ID of welcome channel
+DC_MSG_CLUB_STATS = 959085993070313474
+
+DC_CH_TEST = 958972040654778418 # ID of bot-test channel
+
+DC_CH_ACTIVITY_MONITOR = 1320345572435169290 # ID of the activity-monitor channel
 
 DC_MEMBER_ROLES = ["Member", "Senior", "Vice-President", "President"]
 DC_EXCLUSIVE_ROLES = DC_MEMBER_ROLES + ["Friends"]
@@ -53,6 +62,14 @@ def utc_time_now():
 async def fetch_bs_club_members():
     async with aiohttp.ClientSession(headers=BS_HEADERS) as http_client:
         async with http_client.get("https://api.brawlstars.com/v1/clubs/%232R288L2YV/members") as resp:
+            json_body = await resp.json()
+            return json_body["items"] if "items" in json_body else []
+
+
+async def fetch_battle_log(player_tag):
+    async with aiohttp.ClientSession(headers=BS_HEADERS) as http_client:
+        url = f"https://api.brawlstars.com/v1/players/{player_tag}/battlelog"
+        async with http_client.get(url) as resp:
             json_body = await resp.json()
             return json_body["items"] if "items" in json_body else []
 
@@ -85,7 +102,7 @@ def fuzzy_search_dc_member(name, members, score_cutoff=0):
 
 async def club_stats(json_dict, channel):
     logger.info("Updating club stats...")
-    message = await channel.fetch_message(959085993070313474)
+    message = await channel.fetch_message(DC_MSG_CLUB_STATS)
     if channel is None or message is None:
         logger.warning("No channel/message found to update club stats")
         return
@@ -143,7 +160,7 @@ class MainCog(commands.Cog):
 
             # Brawl Stars vs. Discord Name
             bs_name = bs_member["name"]
-            content += f"\n{pos+1}. {bs_name}"
+            content += f"\n{pos + 1}. {bs_name}"
             dc_member = fuzzy_search_dc_member(bs_name, dc_users, score_cutoff=75)
             if dc_member is not None:
                 dc_member_ids_listed.append(dc_member.id)
@@ -192,13 +209,30 @@ class MainCog(commands.Cog):
 
     @tasks.loop(minutes=5)
     async def update_club(self):
-        channel = self.bot.get_channel(945301557614903349)  # ID of the welcome channel
-        headers = {"Authorization": f"Bearer {bs_token}"}
-        async with aiohttp.ClientSession(headers=headers) as http_client:
+        channel = self.bot.get_channel(DC_CH_WELCOME)
+        async with aiohttp.ClientSession(headers=BS_HEADERS) as http_client:
             async with http_client.get("https://api.brawlstars.com/v1/clubs/%232R288L2YV") as resp:
                 json_dict = await resp.json()
-                # await club_log(json)
                 await club_stats(json_dict, channel)
+
+    @tasks.loop(minutes=5)
+    async def update_activity(self):
+        logger.info("Updating club members...")
+        channel = self.bot.get_channel(DC_CH_TEST)
+        if channel is None:
+            logger.warning("No channel found to update activity")
+            return
+
+        content = "**========= Brawl Stars Activity Monitor =========**"
+        club_members = await fetch_bs_club_members()
+        for member in club_members:
+            tag = member["tag"]
+            name = member["name"]
+            matches = await fetch_battle_log(tag)
+            content += f"\n{name}: {len(matches)} matches"
+
+        channel.send(content)
+
 
     @update_members.before_loop
     @update_club.before_loop
