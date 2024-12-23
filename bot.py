@@ -134,10 +134,12 @@ class MainCog(commands.Cog):
         self.bot = bot
         self.update_members.start()
         self.update_club.start()
+        self.update_activity.start()
 
     def cog_unload(self):
         self.update_members.cancel()
         self.update_club.cancel()
+        self.update_activity.cancel()
 
     @tasks.loop(minutes=5)
     async def update_members(self):
