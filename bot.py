@@ -1,13 +1,12 @@
 import discord
 from discord.ext import tasks, commands
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from thefuzz import fuzz
 import aiohttp
 import asyncio
 import logging
 import urllib.parse
 import os.path
-
 
 PROJDIR = os.path.dirname(__file__)
 
@@ -39,17 +38,18 @@ BS_ROLE_TO_ID = {"president": 945309687685984276, "vicePresident": 9453100007614
                  "senior": 945310228830908436, "member": 945310581827715082}
 
 # Discord constants
-DC_CH_CLUB_MEMBERS = 1008354101207257098 # ID of club-members channel
+DC_CH_CLUB_MEMBERS = 1008354101207257098  # ID of club-members channel
 DC_MSG_CLUB_MEMBERS_1 = 1172931277410795602
 DC_MSG_CLUB_MEMBERS_2 = 1172931280489422879
 DC_MSG_CLUB_MEMBERS_3 = 1172931281688993882
 
-DC_CH_WELCOME = 945301557614903349 # ID of welcome channel
+DC_CH_WELCOME = 945301557614903349  # ID of welcome channel
 DC_MSG_CLUB_STATS = 959085993070313474
 
-DC_CH_TEST = 958972040654778418 # ID of bot-test channel
+DC_CH_TEST = 958972040654778418  # ID of bot-test channel
 
-DC_CH_ACTIVITY_MONITOR = 1320345572435169290 # ID of the activity-monitor channel
+DC_CH_ACTIVITY_MONITOR = 1320345572435169290  # ID of the activity-monitor channel
+DC_MSG_AVG_MATCHES = 1320725632937627690
 
 DC_MEMBER_ROLES = ["Member", "Senior", "Vice-President", "President"]
 DC_EXCLUSIVE_ROLES = DC_MEMBER_ROLES + ["Friends"]
@@ -66,12 +66,14 @@ async def fetch_bs_club_members():
             return json_body["items"] if "items" in json_body else []
 
 
-async def fetch_battle_log(player_tag):
+async def fetch_battle_log(player_tag, player_name):
+    response = {"name": player_name, "tag": player_tag, }
     async with aiohttp.ClientSession(headers=BS_HEADERS) as http_client:
-        url = f"https://api.brawlstars.com/v1/players/{player_tag}/battlelog"
+        url = f"https://api.brawlstars.com/v1/players/{urllib.parse.quote(player_tag)}/battlelog"
         async with http_client.get(url) as resp:
             json_body = await resp.json()
-            return json_body["items"] if "items" in json_body else []
+            response["matches"] = json_body.get("items", [])
+    return response
 
 
 def filter_bots(users):
@@ -222,22 +224,52 @@ class MainCog(commands.Cog):
     @tasks.loop(minutes=5)
     async def update_activity(self):
         logger.info("Updating activity...")
-        channel = self.bot.get_channel(DC_CH_TEST)
+        channel = self.bot.get_channel(DC_CH_ACTIVITY_MONITOR)
+        message = await channel.fetch_message(DC_MSG_AVG_MATCHES)
         if channel is None:
             logger.warning("No channel found to update activity")
             return
 
-        content = "**========= Brawl Stars Activity Monitor =========**"
+        content = "**========= Average matches per day in last 7 days =========**"
         club_members = await fetch_bs_club_members()
+        tasks = []
         for member in club_members:
             tag = member["tag"]
             name = member["name"]
-            matches = await fetch_battle_log(tag)
-            content += f"\n{name}: {len(matches)} matches"
+            tasks.append(asyncio.create_task(fetch_battle_log(tag, name)))
+        player_logs = await asyncio.gather(*tasks)
 
-        channel.send(content)
+        activity_list = []
+        for player_log in player_logs:
+            name = player_log["name"]
+            timestamps = [datetime.strptime(match["battleTime"], "%Y%m%dT%H%M%S.%fZ").replace(tzinfo=timezone.utc)
+                          for match in player_log["matches"]]
+            min_timestamp = min(timestamps)
+            now = datetime.now(timezone.utc)
+            th_timestamp = now - timedelta(days=7)
+            timestamps = [ts for ts in timestamps if ts > th_timestamp]
+            if min_timestamp < th_timestamp:
+                min_timestamp = th_timestamp
+            time_diff_days = (now - min_timestamp).total_seconds() / (24 * 3600)
+            n_matches = len(timestamps)
+            matches_per_day = n_matches / time_diff_days
+
+            player_activity = {"player": name, "avg_matches": matches_per_day,
+                               "n_matches": n_matches, "timespan": time_diff_days}
+            activity_list.append(player_activity)
+
+        sorted_activity_list = sorted(activity_list, key=lambda x: x["avg_matches"], reverse=True)
+
+        for idx, player_activity in enumerate(sorted_activity_list):
+            name = player_activity["player"]
+            avg_matches = player_activity["avg_matches"]
+            tot_matches = player_activity["n_matches"]
+            timespan = player_activity["timespan"]
+            content += f"\n{idx + 1}. {name}: {avg_matches:.1f} ({tot_matches} matches in last {timespan:.1f} days)"
+
+        content += f"\n\nLast updated: {utc_time_now()}"
+        await message.edit(content=content)
         logger.info("Updated activity")
-
 
     @update_members.before_loop
     @update_club.before_loop
